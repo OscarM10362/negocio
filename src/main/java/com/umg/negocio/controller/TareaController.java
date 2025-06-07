@@ -6,14 +6,15 @@ package com.umg.negocio.controller;
 
 import com.umg.negocio.service.TareaService;
 import com.umg.negocio.service.HistorialService;
-import com.umg.persistencia.entidades.Tarea;
-import com.umg.persistencia.entidades.HistorialAccion;
+import com.umg.negocio.controller.dto.TareaRequestDTO;   
+import com.umg.negocio.controller.dto.TareaResponseDTO;  
+import com.umg.persistencia.entidades.Tarea;             
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
-import java.util.Optional;
+import java.util.stream.Collectors; 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -21,13 +22,14 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/tareas")
 @Tag(name = "Tareas", description = "API para la gestión de tareas")
 public class TareaController {
     private final TareaService tareaService;
-    private final HistorialService historialService; // Para deshacer acciones
+    private final HistorialService historialService; 
 
     
     @Autowired
@@ -40,57 +42,50 @@ public class TareaController {
                description = "Permite a un usuario registrar una nueva tarea en el sistema.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Tarea creada exitosamente",
-                    content = @Content(schema = @Schema(implementation = Tarea.class))),
-            @ApiResponse(responseCode = "400", description = "Solicitud inválida"),
-            @ApiResponse(responseCode = "404", description = "Usuario, estado o prioridad no encontrados")
+                    content = @Content(schema = @Schema(implementation = TareaResponseDTO.class))), // Cambiado a DTO
+            @ApiResponse(responseCode = "400", description = "Solicitud inválida (ej. datos faltantes, ID de usuario/estado/prioridad no encontrado)")
     })
-    
     @PostMapping
-    public ResponseEntity<Tarea> crearTarea(
-            @RequestBody Tarea tarea,
+    public ResponseEntity<TareaResponseDTO> crearTarea( 
+            @RequestBody TareaRequestDTO tareaDto, 
             @Parameter(description = "ID del usuario que crea la tarea") @RequestHeader("X-User-Id") Long userId) {
         try {
-            Tarea nuevaTarea = tareaService.crearTarea(tarea, userId);
-            return new ResponseEntity<>(nuevaTarea, HttpStatus.CREATED);
+           
+            Tarea nuevaTarea = tareaService.crearTarea(userId, tareaDto); 
+            return new ResponseEntity<>(new TareaResponseDTO(nuevaTarea), HttpStatus.CREATED); 
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().build(); // Manejo de errores básico
+            System.err.println("Error al crear tarea: " + e.getMessage());
+           
+            return ResponseEntity.badRequest().build();
         }
     }
-    
+
     @Operation(summary = "Obtener todas las tareas de un usuario",
                description = "Devuelve una lista de todas las tareas asociadas a un usuario específico.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Lista de tareas obtenida",
-                    content = @Content(schema = @Schema(implementation = List.class))),
+                    content = @Content(schema = @Schema(implementation = TareaResponseDTO.class))), 
             @ApiResponse(responseCode = "404", description = "Usuario no encontrado")
     })
     @GetMapping
-    public ResponseEntity<List<Tarea>> getTareasPorUsuario(
+    public ResponseEntity<List<TareaResponseDTO>> getTareasPorUsuario( 
             @Parameter(description = "ID del usuario para quien se buscan las tareas") @RequestHeader("X-User-Id") Long userId) {
         try {
-            List<Tarea> tareas = tareaService.getTareasPorUsuario(userId);
-            return ResponseEntity.ok(tareas);
+            List<Tarea> tareas = tareaService.getTareasByUserId(userId); 
+            // Mapear cada Tarea entidad a TareaResponseDTO
+            List<TareaResponseDTO> tareaDTOs = tareas.stream()
+                                                     .map(TareaResponseDTO::new) 
+                                                     .collect(Collectors.toList());
+            return ResponseEntity.ok(tareaDTOs);
         } catch (RuntimeException e) {
+            System.err.println("Error al obtener tareas por usuario: " + e.getMessage());
             return ResponseEntity.notFound().build();
         }
     }
     
-     @Operation(summary = "Obtener una tarea por su ID",
-               description = "Devuelve los detalles de una tarea específica.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Tarea encontrada",
-                    content = @Content(schema = @Schema(implementation = Tarea.class))),
-            @ApiResponse(responseCode = "404", description = "Tarea no encontrada")
-    })
-    @GetMapping("/{id}")
-    public ResponseEntity<Tarea> getTareaById(
-            @Parameter(description = "ID de la tarea a buscar") @PathVariable Long id) {
-        Optional<Tarea> tarea = tareaService.getTareaById(id);
-        return tarea.map(ResponseEntity::ok)
-                    .orElse(ResponseEntity.notFound().build());
-    }
+   
     
-    @Operation(summary = "Actualizar una tarea existente",
+    @Operation(summary = "Editar Tarea",
                description = "Modifica los detalles de una tarea específica.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Tarea actualizada exitosamente",
@@ -115,7 +110,7 @@ public class TareaController {
         }
     }
     
-    @Operation(summary = "Eliminar una tarea por su ID",
+    @Operation(summary = "Eliminar una tarea ",
                description = "Elimina una tarea específica del sistema.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Tarea eliminada exitosamente"),
@@ -127,53 +122,21 @@ public class TareaController {
             @Parameter(description = "ID de la tarea a eliminar") @PathVariable Long id,
             @Parameter(description = "ID del usuario que elimina la tarea") @RequestHeader("X-User-Id") Long userId) {
         try {
-            tareaService.eliminarTarea(id, userId);
-            return ResponseEntity.noContent().build();
+            boolean eliminado = tareaService.eliminarTarea(userId, id); 
+            if (eliminado) {
+                return ResponseEntity.noContent().build();
+            }
+            return ResponseEntity.notFound().build();
         } catch (RuntimeException e) {
+            System.err.println("Error al eliminar tarea: " + e.getMessage());
             if (e.getMessage().contains("No autorizado")) {
                 return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+            } else if (e.getMessage().contains("no encontrada")) {
+                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
             }
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.badRequest().build();
         }
     }
     
-    @Operation(summary = "Deshacer la última acción deshacible de un usuario",
-               description = "Revierte la última acción que ha sido marcada como deshacible.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Acción deshecha exitosamente"),
-            @ApiResponse(responseCode = "404", description = "Usuario no encontrado o no hay acciones deshacibles")
-    })
-    @PostMapping("/undo")
-    public ResponseEntity<String> deshacerUltimaAccion(
-            @Parameter(description = "ID del usuario cuya acción se va a deshacer") @RequestHeader("X-User-Id") Long userId) {
-        try {
-           
-            boolean deshecha = historialService.deshacerUltimaAccion(
-                
-                null 
-            );
-            if (deshecha) {
-                return ResponseEntity.ok("Última acción deshecha exitosamente.");
-            } else {
-                return ResponseEntity.notFound().build();
-            }
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body("Error al deshacer: " + e.getMessage());
-        }
-    }
-    
-     
-    @Operation(summary = "Obtener tareas principales (sin subtareas) de un usuario",
-               description = "Devuelve solo las tareas que no son subtareas de otra.")
-    @GetMapping("/principales")
-    public ResponseEntity<List<Tarea>> getTareasPrincipales(
-            @Parameter(description = "ID del usuario") @RequestHeader("X-User-Id") Long userId) {
-        try {
-            List<Tarea> tareas = tareaService.getTareasPrincipalesPorUsuario(userId);
-            return ResponseEntity.ok(tareas);
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-        }
-    }
-
+ 
 }

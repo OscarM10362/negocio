@@ -7,7 +7,7 @@ package com.umg.negocio.service;
 import com.umg.persistencia.entidades.HistorialAccion;
 import com.umg.persistencia.entidades.Usuario;
 import com.umg.persistencia.repository.HistorialAccionRepository;
-import com.umg.estructuradatos.Pila; //  pila personalizada
+import com.umg.estructuradatos.Pila; 
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import java.util.Optional;

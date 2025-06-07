@@ -16,7 +16,7 @@ import com.umg.negocio.messaging.RabbitMQPublisher; // Importa el publicador
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional; // Para manejar transacciones
-import java.time.LocalDateTime;
+import com.umg.negocio.controller.dto.TareaRequestDTO;
 import java.util.List;
 import java.util.Optional;
 
@@ -46,6 +46,7 @@ public class TareaService {
     public Tarea crearTarea(Tarea tarea, Long usuarioId) {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        
         tarea.setUsuario(usuario);
 
         
@@ -145,7 +146,7 @@ public class TareaService {
     }
     
      @Transactional
-    public void eliminarTarea(Long id, Long usuarioId) {
+    public boolean eliminarTarea(Long id, Long usuarioId) {
         Tarea tareaExistente = tareaRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Tarea no encontrada con ID: " + id));
 
@@ -159,11 +160,20 @@ public class TareaService {
         
         historialService.registrarAccion(usuario, id, "ELIMINAR_TAREA", "Tarea '" + tareaExistente.getTitulo() + "' eliminada.", true);
         tareaRepository.delete(tareaExistente);
+        return false;
     }
 
     public List<Tarea> getTareasPrincipalesPorUsuario(Long usuarioId) {
         Usuario usuario = usuarioRepository.findById(usuarioId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
         return tareaRepository.findByParentTaskIsNullAndUsuario(usuario);
+    }
+
+    public Tarea crearTarea(Long userId, TareaRequestDTO tareaDto) {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
+    }
+
+    public List<Tarea> getTareasByUserId(Long userId) {
+        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 }
